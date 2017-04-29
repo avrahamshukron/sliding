@@ -1,70 +1,87 @@
-#! /usr/bin/python3
-
 import abc
 import collections
 
 
-def uptime():
-    with open("/proc/uptime") as f:
-        return float(f.read().split()[0])
-
-
-Packet = collections.namedtuple("Packet", ["end_time", "retrans", "fields",
-                                           "cookie"])
+Request = collections.namedtuple("Request", ["data", "retrans_left"])
 
 
 class Protocol(object):
     __metaclass__ = abc.ABCMeta
 
     @abc.abstractmethod
-    def send(self, fields):
-        "send a request according to given fields"
+    def send(self, data):
+        """
+        send a request.
+        
+        :param data: The data to send
+        :return A unique identifier for the packet sent, that can be matched to 
+            a corresponding ack response.
+        """
 
     @abc.abstractmethod
-    def recv(self, state, timeout):
-        "returns a response after handling it or raises TimeoutError"
+    def recv(self, timeout):
+        """
+        Wait for the next response, and return the Request tag it corresponds to
+        
+        :param timeout: How long to wait for the response in seconds.
+        :raise TimeoutError: If a response is not available within `timeout`
+        """
 
-    @abc.abstractmethod
-    def match(self, resp, cookie):
-        "decide whether a given response matches a former request by cookie"
 
-
-class NonmatchingResponse(Exception):
+class UnexpectedResponse(Exception):
     pass
 
 
-def __queue(window, protocol, retrans, fields, timeout):
-    cookie = protocol.send(fields)
-    window.append(Packet(uptime() + timeout, retrans, fields, cookie))
+class TimeoutError(RuntimeError):
+    pass
 
 
-def _queue(window, protocol, retrans, iterator, timeout):
-    try:
-        fields = next(iterator)
-    except StopIteration:
-        return
-    __queue(window, protocol, retrans, fields, timeout)
-
-
-def run_sliding_window(protocol, state, size, retrans, iterator,
-                       timeout):
-    window = []
+def run_sliding_window(requests, protocol, size, max_retrans, timeout):
+    """
+    Execute a sliding window transmission.
+     
+    :param requests: An Iterator | Iterable of all the packets to be sent.
+        Each element is passed to `protocol` when it needs to be sent. 
+    :param size: The window size. How many packets will be sent before awaiting 
+        responses to arrive
+    :param max_retrans: How many times to resend a packet which hasn't received
+        a response before failing the entire operation 
+    :param timeout: How long (in seconds) to wait for a response before 
+        initiating a retransmission
+    :param protocol: A `Protocol` implementation.
+    """
+    window = collections.OrderedDict()
+    if not hasattr(requests, "next"):
+        requests = iter(requests)
     for _ in range(size):
-        _queue(window, protocol, retrans, iterator, timeout)
+        if _send_next(requests, window, max_retrans, protocol) is None:
+            break
+
     while window:
         try:
-            resp = protocol.recv(window[0].end_time - uptime())
+            tag = protocol.recv(timeout)
         except TimeoutError:
-            packet = window.pop(0)
-            if not packet.retrans:
+            _, packet = window.popitem(last=False)
+            if not packet.retrans_left:
                 raise
-            __queue(window, protocol, packet.retrans - 1,
-                    packet.fields, timeout)
+            __send(packet.data, window, packet.retrans_left - 1, protocol)
             continue
-        for i, packet in enumerate(window):
-            if protocol.match(resp, packet.cookie):
-                window.pop(i)
-                break
-        else:  # no match
-            raise NonmatchingResponse(resp)
-        _queue(window, protocol, retrans, iterator, timeout)
+
+        if tag not in window:
+            raise UnexpectedResponse(tag)
+        window.pop(tag)
+        _send_next(requests, window, max_retrans, protocol)
+
+
+def __send(data, window, retrans_left, protocol):
+    tag = protocol.send(data)
+    window[tag] = Request(data, retrans_left)
+    return tag
+
+
+def _send_next(iterator, window, max_retrans, protocol):
+    try:
+        return __send(
+            iterator.next(), window, max_retrans, protocol)
+    except StopIteration:
+        return None
