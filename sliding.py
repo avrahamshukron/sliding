@@ -44,24 +44,26 @@ class TimeoutError(RuntimeError):
 
 class SlidingWindow(object):
 
-    def __init__(self, protocol, size, max_retrans, timeout):
+    def __init__(self, protocol, size, max_retrans, timeout, clock=time.time):
         """
         Initialize new SlidingWindow
 
         :param protocol: A `Protocol` implementation.
         :param size: The window size. How many packets will be sent before
-            awaiting responses to arrive 
+            awaiting responses to arrive.
         :param max_retrans: How many times to resend a packet which hasn't
-            received a response before failing the entire operation
+            received a response before failing the entire operation.
         :param timeout: How long (in seconds) to wait for a response for a given
             packet before initiating a retransmission. The time starts to count
-            from the moment the packet is sent through the window
+            from the moment the packet is sent through the window.
+        :param clock: A callable returning the current time, in seconds.
         """
         self._protocol = protocol
         self._size = size
         self._max_retrans = max_retrans
         self._timeout = timeout
         self._window = collections.OrderedDict()
+        self.clock = clock
 
     def run(self, requests):
         """
@@ -79,7 +81,7 @@ class SlidingWindow(object):
 
         while self._window:
             last_tag, packet = self._window.popitem(last=False)
-            timeout = min(self._timeout, time.time() - packet.end_time)
+            timeout = min(self._timeout, self.clock() - packet.end_time)
             try:
                 tag = self._protocol.recv(timeout)
             except TimeoutError:
@@ -94,7 +96,7 @@ class SlidingWindow(object):
 
     def __send(self, data, retrans_left):
         tag = self._protocol.send(data)
-        request = Request(end_time=time.time() + self._timeout,
+        request = Request(end_time=self.clock() + self._timeout,
                           data=data, retrans_left=retrans_left)
         self._window[tag] = request
         return tag
