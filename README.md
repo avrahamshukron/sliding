@@ -1,37 +1,64 @@
-## Welcome to GitHub Pages
+# sliding
+_Protocol-agnostic, efficient sliding transmission window implementation_
 
-You can use the [editor on GitHub](https://github.com/avrahamshukron/sliding/edit/master/README.md) to maintain and preview the content for your website in Markdown files.
-
-Whenever you commit to this repository, GitHub Pages will run [Jekyll](https://jekyllrb.com/) to rebuild the pages in your site, from the content in your Markdown files.
-
-### Markdown
-
-Markdown is a lightweight and easy-to-use syntax for styling your writing. It includes conventions for
-
-```markdown
-Syntax highlighted code block
-
-# Header 1
-## Header 2
-### Header 3
-
-- Bulleted
-- List
-
-1. Numbered
-2. List
-
-**Bold** and _Italic_ and `Code` text
-
-[Link](url) and ![Image](src)
+## Usage
+```python
+SlidingWindow(protocol, size, max_retrans, timeout).run(packets)
 ```
 
-For more details see [GitHub Flavored Markdown](https://guides.github.com/features/mastering-markdown/).
+* `protocol` - An object capable of sending packets and receiving responses.
+* `size` - The window size.
+* `max_retrans` - Max retrans attempts for each packet before failing the
+    operation.
+* `timeout` - How long to wait for a confirmation for a packet since its
+    transmission.
+* `packets` - A source of iterable data describing each packet, that `protocol`
+    is capable of sending
 
-### Jekyll Themes
+### Theoretical Background
+Many protocols dealing with transferring large amount of data, needs to do this 
+in a reliable manner.
 
-Your Pages site will use the layout and styles from the Jekyll theme you have selected in your [repository settings](https://github.com/avrahamshukron/sliding/settings). The name of this theme is saved in the Jekyll `_config.yml` configuration file.
+Depending on the medium the data has to travel in, this might not be a trivial 
+task. data might get lost along the way, or get corrupted due to noise or other 
+physical factors.
 
-### Support or Contact
+Sending the entire data in a single transmission is not very practical because 
+if something goes wrong - you have to resend to whole thing again.
 
-Having trouble with Pages? Check out our [documentation](https://help.github.com/categories/github-pages-basics/) or [contact support](https://github.com/contact) and we’ll help you sort it out.
+Thus, the data is usually split between multiple "packets", which can be 
+verified, and retransmitted if needed.
+
+To verify a packet, the receiver needs to confirm its reception.
+This confirmation, is itself bound to the same conditions of the original 
+packet, and might also get lost / corrupted.
+The sender need to deal with these situation by issuing a re-transmission, and 
+the receiver should expect duplicate packets arriving.
+
+#### The performance issue
+Waiting for confirmation on each packet before sending the next one, will
+result in a bad throughput. This is because the medium will not be utilized
+while waiting for the confirmation to arrive.
+ 
+Ideally we would prefer that the sender will send the _entire_ data (split to
+individual packets) to the receiver, and then wait for confirmation / rejection
+on individual packets. Practically it is not always possible due to memory
+limitations on both sides, and in order to avoid network congestion.
+
+#### Sliding Window
+For these reasons, protocols usually limits the number of packets allowed to be
+transmitted in burst, before pausing for confirmation. 
+A batch of packets that are waiting confirmation is called a _Transmission Window_
+
+There is no need to wait for confirmation on the entire window. As confirmations
+starts to arrive, more packets are can be sent, thus shifting the window
+forward, or _Sliding_ it. 
+
+### Terminology
+ - **Request** - a packet sent to a receiver, that requires confirmation by the 
+ receiver
+ - **Retransmission Timeout** - The amount of time from the transmission of a 
+ packet, in which a confirmation is expected. If no confirmation received, the 
+ packet is considered lost, and should be retransmitted.
+ - **Window Size** - The maximal amount of unconfirmed packets that are allowed
+ to sent at any given moment.
