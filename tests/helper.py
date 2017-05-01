@@ -55,7 +55,7 @@ class TestCase(unittest.TestCase):
         formatter = logging.Formatter(fmt)
 
         file_handler = logging.FileHandler(
-            "tests/output/{}.log".format(type(self).__name__), "w")
+            "output/{}.log".format(type(self).__name__), "w")
         file_handler.setFormatter(formatter)
         logging.root.addHandler(file_handler)
         logging.root.setLevel(logging.DEBUG)

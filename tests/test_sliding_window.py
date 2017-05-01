@@ -37,8 +37,7 @@ class TestSlidingWindow(helper.TestCase):
             requests = range(num_packets)
             expected = range(min(num_packets, window_size))
             with self.assertRaises(sliding.TimeoutError):
-                sliding.run_sliding_window(requests, protocol, window_size, 0,
-                                           0)
+                sliding.SlidingWindow(protocol, window_size, 0, 0).run(requests)
             self.assertSequenceEqual(
                 protocol.awaiting_response.values(), expected)
 
@@ -54,8 +53,8 @@ class TestSlidingWindow(helper.TestCase):
             for max_retrans in range(10):
                 protocol.reset()
                 with self.assertRaises(sliding.TimeoutError):
-                    sliding.run_sliding_window(packets, protocol, num_packets,
-                                               max_retrans, 0)
+                    sliding.SlidingWindow(
+                        protocol, num_packets, max_retrans, 0).run(packets)
                 # +1 because each packet is sent at least once, even when
                 # max_retrans = 0.
                 expected = packets * (max_retrans + 1)
@@ -74,10 +73,10 @@ class TestSlidingWindow(helper.TestCase):
             for num_packets in range(window_size * 2):
                 protocol.reset()
                 packets = range(num_packets)
-                sliding.run_sliding_window(packets, protocol, window_size, 0, 0)
+                sliding.SlidingWindow(protocol, window_size, 0, 0).run(packets)
                 self.assertSequenceEqual(packets, protocol.responded.values())
 
     def test_mismatch_response(self):
         proto = MismatchProtocol()
         with self.assertRaises(sliding.UnexpectedResponse):
-            sliding.run_sliding_window([0], proto, 1, 0, 0)
+            sliding.SlidingWindow(proto, 1, 0, 0).run([0])
