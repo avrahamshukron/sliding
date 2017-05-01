@@ -1,8 +1,10 @@
 import abc
+import time
 import collections
 
 
-Request = collections.namedtuple("Request", ["data", "retrans_left"])
+Request = collections.namedtuple(
+    "Request", ["end_time", "data", "retrans_left"])
 
 
 class Protocol(object):
@@ -46,42 +48,45 @@ def run_sliding_window(requests, protocol, size, max_retrans, timeout):
         responses to arrive
     :param max_retrans: How many times to resend a packet which hasn't received
         a response before failing the entire operation 
-    :param timeout: How long (in seconds) to wait for a response before 
-        initiating a retransmission
+    :param timeout: How long (in seconds) to wait for a response for a given
+        packet before initiating a retransmission. The time starts to count
+        from the moment the packet is sent through the window
     :param protocol: A `Protocol` implementation.
     """
     window = collections.OrderedDict()
     if not hasattr(requests, "next"):
         requests = iter(requests)
     for _ in range(size):
-        if _send_next(requests, window, max_retrans, protocol) is None:
+        if _send_next(requests, window, max_retrans, protocol, timeout) is None:
             break
 
     while window:
+        last_tag, packet = window.popitem(last=False)
+        timeout = min(timeout, time.time() - packet.end_time)
         try:
             tag = protocol.recv(timeout)
         except TimeoutError:
-            _, packet = window.popitem(last=False)
-            if not packet.retrans_left:
+            if packet.retrans_left <= 0:
                 raise
-            __send(packet.data, window, packet.retrans_left - 1, protocol)
+            __send(packet.data, window,
+                   packet.retrans_left - 1,
+                   protocol, timeout)
             continue
 
-        if tag not in window:
+        if tag != last_tag and tag not in window:
             raise UnexpectedResponse(tag)
-        window.pop(tag)
-        _send_next(requests, window, max_retrans, protocol)
+        _send_next(requests, window, max_retrans, protocol, timeout)
 
 
-def __send(data, window, retrans_left, protocol):
+def __send(data, window, retrans_left, protocol, timeout):
     tag = protocol.send(data)
-    window[tag] = Request(data, retrans_left)
+    window[tag] = Request(time.time() + timeout, data, retrans_left)
     return tag
 
 
-def _send_next(iterator, window, max_retrans, protocol):
+def _send_next(iterator, window, max_retrans, protocol, timeout):
     try:
         return __send(
-            iterator.next(), window, max_retrans, protocol)
+            iterator.next(), window, max_retrans, protocol, timeout)
     except StopIteration:
         return None
