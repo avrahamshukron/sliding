@@ -2,16 +2,18 @@
 _Protocol-agnostic, efficient sliding transmission window implementation_
 
 ## Usage
-    SlidingWindow(protocol, size, max_retrans, timeout).run(packets)
-    
-    protocl - An object capable of sending packets and receiving responses.
-    size - The window size.
-    max_retrans - Max retrans attempts for each packet before failing the
-        operation.
-    timeout - How long to wait for a confirmation for a packet since its
-        transmission.
-    packets - A source of iterable data describing each packet, that `protocol`
-        is capable of sending
+```python
+SlidingWindow(protocol, size, max_retrans, timeout).run(packets)
+```
+
+* `protocol` - An object capable of sending packets and receiving responses.
+* `size` - The window size.
+* `max_retrans` - Max retrans attempts for each packet before failing the
+    operation.
+* `timeout` - How long to wait for a confirmation for a packet since its
+    transmission.
+* `packets` - A source of iterable data describing each packet, that `protocol`
+    is capable of sending
 
 ### Theoretical Background
 Many protocols dealing with transferring large amount of data, needs to do this 
