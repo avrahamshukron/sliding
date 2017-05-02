@@ -58,6 +58,10 @@ class SlidingWindow(object):
             from the moment the packet is sent through the window.
         :param clock: A callable returning the current time, in seconds.
         """
+        if timeout < 0:
+            raise ValueError("timeout must be >= 0")
+        if size < 1:
+            raise ValueError("size must be >= 1")
         self._protocol = protocol
         self._size = size
         self._max_retrans = max_retrans
