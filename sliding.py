@@ -20,17 +20,19 @@ class Protocol(object):
         send a request.
         
         :param data: The data to send
-        :return A unique identifier for the packet sent, that can be matched to
+        :return: A unique identifier for the packet sent, that can be matched to
             a corresponding ack response.
         """
 
     @abc.abstractmethod
     def recv(self, timeout):
         """
-        Wait for the next response, and return the Request tag it corresponds to
+        Get the next response.
         
         :param timeout: How long to wait for the response in seconds.
-        :raise TimeoutError: If a response is not available within `timeout`
+        :return: A unique identifier of a packet previously sent, or raises 
+            timeout error if no response is received within `timeout` 
+        :raise TimeoutError: If a response is not available within `timeout` 
         """
 
 
