@@ -94,7 +94,7 @@ class SlidingWindow(object):
                 self._window.pop(oldest_tag)
                 if oldest_packet.retrans_left <= 0:
                     raise
-                self.__send(oldest_packet.data, oldest_packet.retrans_left - 1)
+                self._send(oldest_packet.data, oldest_packet.retrans_left - 1)
                 continue
 
             if self._window.pop(confirmed_tag, default=None) is None:
@@ -116,7 +116,7 @@ class SlidingWindow(object):
             if self._send_next(requests) is None:
                 break
 
-    def __send(self, data, retrans_left):
+    def _send(self, data, retrans_left):
         tag = self._protocol.send(data)
         request = Request(end_time=self.clock() + self._timeout,
                           data=data, retrans_left=retrans_left)
@@ -126,5 +126,5 @@ class SlidingWindow(object):
     def _send_next(self, iterator):
         data = next(iterator, None)
         if data is not None:
-            return self.__send(data, self._max_retrans)
+            return self._send(data, self._max_retrans)
         return None
