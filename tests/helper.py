@@ -37,7 +37,7 @@ class Protocol(sliding.Protocol):
         return False
 
     def recv(self, timeout):
-        req_id, data = self.awaiting_response.popitem(last=False)
+        data, req_id = self._recv()
         if self.should_drop(req_id, data):
             self._logger.info(
                 "dropping response for Request(id=%s, data=%s", req_id, data)
@@ -45,6 +45,9 @@ class Protocol(sliding.Protocol):
         self._logger.info("returning Response(id=%s)", req_id)
         self.responded[req_id] = data
         return req_id
+
+    def _recv(self):
+        return self.awaiting_response.popitem(last=False)
 
 
 class TestCase(unittest.TestCase):
