@@ -106,8 +106,7 @@ class SlidingWindow(object):
         return tag
 
     def _send_next(self, iterator):
-        try:
-            data = iterator.next()
-        except StopIteration:
-            return None
-        return self.__send(data, self._max_retrans)
+        data = next(iterator, None)
+        if data is not None:
+            return self.__send(data, self._max_retrans)
+        return None
