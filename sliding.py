@@ -77,26 +77,42 @@ class SlidingWindow(object):
             sent. Each element is passed to `protocol` when it needs to be sent. 
         """
 
-        if not hasattr(requests, "next"):
-            requests = iter(requests)
+        requests = self._iter(requests)
+        self._burst(requests)
+
+        while self._window:
+            # The window is ordered by transmission time, least to most recent.
+            # Each iteration we expect the response for the least recent packet
+            oldest_tag, oldest_packet = next(self._window.iteritems())
+            timeout = self._calculate_timeout(
+                oldest_packet.end_time, self.clock())
+            try:
+                confirmed_tag = self._protocol.recv(timeout)
+            except TimeoutError:  # Oldest packet needs to be retransmitted
+                self._window.pop(oldest_tag)
+                if oldest_packet.retrans_left <= 0:
+                    raise
+                self.__send(oldest_packet.data, oldest_packet.retrans_left - 1)
+                continue
+
+            if self._window.pop(confirmed_tag, default=None) is None:
+                raise UnexpectedResponse(confirmed_tag)
+            self._send_next(requests)
+
+    def _calculate_timeout(self, end_time, now):
+        """Normalize timeout to always be in [0, self._timeout]"""
+        return max(0, min(self._timeout, end_time - now))
+
+    @staticmethod
+    def _iter(elements):
+        if not hasattr(elements, "next"):
+            elements = iter(elements)
+        return elements
+
+    def _burst(self, requests):
         for _ in range(self._size):
             if self._send_next(requests) is None:
                 break
-
-        while self._window:
-            last_tag, packet = self._window.popitem(last=False)
-            timeout = min(self._timeout, self.clock() - packet.end_time)
-            try:
-                tag = self._protocol.recv(timeout)
-            except TimeoutError:
-                if packet.retrans_left <= 0:
-                    raise
-                self.__send(packet.data, packet.retrans_left - 1)
-                continue
-
-            if tag != last_tag and tag not in self._window:
-                raise UnexpectedResponse(tag)
-            self._send_next(requests)
 
     def __send(self, data, retrans_left):
         tag = self._protocol.send(data)
