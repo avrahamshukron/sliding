@@ -10,5 +10,6 @@ def config_logging():
     formatter = logging.Formatter(LOG_FORMAT)
     stdout_handler = logging.StreamHandler()
     stdout_handler.setFormatter(formatter)
+    stdout_handler.setLevel(logging.INFO)
     logging.root.addHandler(stdout_handler)
     logging.root.setLevel(logging.DEBUG)

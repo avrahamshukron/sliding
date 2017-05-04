@@ -56,12 +56,12 @@ class Client(object):
         self.send([packet])
 
     def send(self, commands):
-        self.logger.info("Initiating SlidingWindow transaction")
+        self.logger.debug("Initiating SlidingWindow transaction")
         sliding.SlidingWindow(self.protocol, 5, 3, 5).run(commands)
 
     def _send(self, command):
         request = Request(self.seq.next(), command)
-        self.logger.info("Sending %s", request)
+        self.logger.debug("Sending %s", request)
         self._socket.sendto(pickle.dumps(request), self._server)
         return request.id
 
@@ -72,7 +72,7 @@ class Client(object):
         except socket.timeout:
             raise sliding.TimeoutError()
         response = pickle.loads(data)
-        self.logger.info("Received %s", response)
+        self.logger.debug("Received %s", response)
         return response.id
 
 
