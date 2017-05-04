@@ -7,6 +7,8 @@ import collections
 # order for the transmission to succeed. If no confirmation received for a
 # request in a given `timeout`, then the request is sent again - up to
 # `max_retrans` times
+import logging
+
 Request = collections.namedtuple(
     "Request", ["end_time", "data", "retrans_left"])
 
@@ -45,6 +47,8 @@ class TimeoutError(RuntimeError):
 
 
 class SlidingWindow(object):
+
+    logger = logging.getLogger("SlidingWindow")
 
     def __init__(self, protocol, size, max_retrans, timeout, clock=time.time):
         """
@@ -94,9 +98,12 @@ class SlidingWindow(object):
                 self._window.pop(oldest_tag)
                 if oldest_packet.retrans_left <= 0:
                     raise
+                self.logger.warning("Packet #%s timed out, retransmitting",
+                                    oldest_tag)
                 self._send(oldest_packet.data, oldest_packet.retrans_left - 1)
                 continue
 
+            self.logger.debug("Packet #%s acked", confirmed_tag)
             if self._window.pop(confirmed_tag, default=None) is None:
                 raise UnexpectedResponse(confirmed_tag)
             self._send_next(requests)
@@ -120,6 +127,7 @@ class SlidingWindow(object):
         tag = self._protocol.send(data)
         request = Request(end_time=self.clock() + self._timeout,
                           data=data, retrans_left=retrans_left)
+        self.logger.debug("Packet #%s sent", tag)
         self._window[tag] = request
         return tag
 
