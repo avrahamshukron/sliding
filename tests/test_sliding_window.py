@@ -105,14 +105,6 @@ class TestSlidingWindow(helper.TestCase):
                 sliding.SlidingWindow(protocol, window_size, 0, 0).run(packets)
                 self.assertSequenceEqual(packets, protocol.responded.values())
 
-    def test_mismatch_response(self):
-        """
-        Test that a response to a packet never sent triggers UnexpectedResponse
-        """
-        proto = MismatchProtocol()
-        with self.assertRaises(sliding.UnexpectedResponse):
-            sliding.SlidingWindow(proto, 1, 0, 0).run([0])
-
     def test_out_of_order_response(self):
         max_packets = 10
         for num_packets in xrange(1, max_packets):

@@ -2,15 +2,7 @@ import abc
 import time
 import collections
 
-# An object holding an information about a request currently sent and
-# awaiting Ack response. Every request must be Ack'ed by the recipient in
-# order for the transmission to succeed. If no confirmation received for a
-# request in a given `timeout`, then the request is sent again - up to
-# `max_retrans` times
 import logging
-
-Request = collections.namedtuple(
-    "Request", ["end_time", "data", "retrans_left"])
 
 
 class Protocol(object):
@@ -38,12 +30,17 @@ class Protocol(object):
         """
 
 
-class UnexpectedResponse(Exception):
-    pass
-
-
 class TimeoutError(RuntimeError):
     pass
+
+
+# An object holding an information about a request currently sent and
+# awaiting Ack response. Every request must be Ack'ed by the recipient in
+# order for the transmission to succeed. If no confirmation received for a
+# request in a given `timeout`, then the request is sent again - up to
+# `max_retrans` times
+Request = collections.namedtuple(
+    "Request", ["end_time", "data", "retrans_left"])
 
 
 class SlidingWindow(object):
@@ -72,7 +69,7 @@ class SlidingWindow(object):
         self._size = size
         self._max_retrans = max_retrans
         self._timeout = timeout
-        self._window = collections.OrderedDict()
+        self._window = None  # forward declaration
         self.clock = clock
 
     def run(self, requests):
@@ -82,7 +79,8 @@ class SlidingWindow(object):
         :param requests: An (`Iterator | Iterable`) of all the packets to be
             sent. Each element is passed to `protocol` when it needs to be sent. 
         """
-
+        self._window = collections.OrderedDict()
+        timed_out = set()
         requests = self._iter(requests)
         self._burst(requests)
 
@@ -96,16 +94,25 @@ class SlidingWindow(object):
                 confirmed_tag = self._protocol.recv(timeout)
             except TimeoutError:  # Oldest packet needs to be retransmitted
                 self._window.pop(oldest_tag)
+                timed_out.add(oldest_tag)
                 if oldest_packet.retrans_left <= 0:
                     raise
-                self.logger.warning("Packet #%s timed out, retransmitting",
+                self.logger.warning("Request #%s timed out, retransmitting",
                                     oldest_tag)
                 self._send(oldest_packet.data, oldest_packet.retrans_left - 1)
                 continue
 
-            self.logger.debug("Packet #%s acked", confirmed_tag)
             if self._window.pop(confirmed_tag, default=None) is None:
-                raise UnexpectedResponse(confirmed_tag)
+                if confirmed_tag in timed_out:
+                    timed_out.remove(confirmed_tag)
+                    self.logger.warning(
+                        "Request %s acked, but already timed-out and "
+                        "retransmitted. Consider increasing the timeout",
+                        confirmed_tag
+                    )
+                else:
+                    self.logger.warning("Unexpected response: %s", confirmed_tag)
+            self.logger.debug("Request #%s acked", confirmed_tag)
             self._send_next(requests)
 
     def _calculate_timeout(self, end_time, now):
@@ -127,7 +134,7 @@ class SlidingWindow(object):
         tag = self._protocol.send(data)
         request = Request(end_time=self.clock() + self._timeout,
                           data=data, retrans_left=retrans_left)
-        self.logger.debug("Packet #%s sent", tag)
+        self.logger.debug("Request #%s sent", tag)
         self._window[tag] = request
         return tag
 
